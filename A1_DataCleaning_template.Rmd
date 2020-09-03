@@ -181,7 +181,7 @@ demodata <- demodata %>%
 loudata <- loudata %>% 
   mutate(ID = str_replace_all(ID, "\\.", ""))
 
-worddata <- loudata %>% 
+worddata <- worddata %>% 
   mutate(ID = str_replace_all(ID, "\\.", ""))
 
 
@@ -230,10 +230,9 @@ all_data <- demodata %>%
 relevant_columns <- c()
 
 all_data <- all_data %>% select(ID, VISIT, Diagnosis, Ethnicity, Gender, Age, ADOS, 
-                    MullenRaw, ExpressiveLangRaw, Socialization, MOT_MLU.x, 
-                    CHI_MLU.x, types_MOT, types_CHI.x, tokens_MOT, tokens_CHI.x)
+                    MullenRaw, ExpressiveLangRaw, Socialization, MOT_MLU, 
+                    CHI_MLU, types_MOT, types_CHI, tokens_MOT, tokens_CHI)
 
-all_data
 
 ```
 
@@ -242,11 +241,6 @@ all_data
 Some things to pay attention to:
 * make sure to check that the merge has included all relevant data (e.g. by comparing the number of rows)
 * make sure to understand whether (and if so why) there are NAs in the dataset (e.g. some measures were not taken at all visits, some recordings were lost or permission to use was withdrawn)
-
-```{r}
-?left_join
-
-```
 
 
 2f. Only using clinical measures from Visit 1
@@ -260,6 +254,14 @@ A possible way to do so:
 
 
 ```{r}
+# A bit of a funky approach 
+all_data <- all_data %>% 
+  mutate(ADOS = if_else(VISIT == "1", ADOS, NULL), 
+         MullenRaw = if_else(VISIT == 1, MullenRaw, NULL), 
+         ExpressiveLangRaw = if_else(VISIT == "1", ExpressiveLangRaw, NULL), 
+         Socialization = if_else(VISIT == "1", Socialization, NULL)) %>%
+  arrange(ID, VISIT) %>% 
+  fill(ADOS, MullenRaw, ExpressiveLangRaw, Socialization)
 
 ```
 
@@ -271,6 +273,22 @@ Now we want to
 * Save the data set using into a csv file. Hint: look into write.csv()
 
 ```{r}
+
+library(digest)
+# Vectorize the hash-function so it doesn't apply to the whole vector
+vdigest <- Vectorize(digest)
+
+
+final_data <- all_data %>% 
+  # Anonymize our participants using hash
+  mutate(ID = vdigest(ID, algo = "sha1")) %>% 
+  # sensible values 
+  mutate(Gender = if_else(Gender == "1", "F", "M"), 
+         Diagnosis = if_else(Diagnosis == "A", "ASD", "TD")) 
+
+
+# Write to file
+final_data %>% write_csv("final_data.csv")
 
 ```
 
@@ -287,7 +305,24 @@ List all kids who:
 3. have not completed all trials. Tip: Use pipes to solve this
 
 ```{r}
+# 1
+final_data %>% 
+  group_by(ID) %>% 
+  summarise(MLU_ACROSS = mean(CHI_MLU)) %>% 
+  filter(MLU_ACROSS > 2.7)
 
+# 2
+final_data %>% 
+  filter(VISIT == "1") %>% 
+  filter(CHI_MLU < 1.5) %>% 
+  select(ID, CHI_MLU)
+
+# 3 
+final_data %>% 
+  group_by(ID) %>% 
+  # count number of trials
+  summarise(num_trials = n()) %>% 
+  filter(num_trials < 6)
 
 ```
 
@@ -298,7 +333,16 @@ USING ARRANGE
 2. Sort kids to find the kid who produced the least amount of words on the 1st visit.
 
 ```{r}
+# 1 
+final_data %>% 
+  filter(VISIT == "6") %>% 
+  arrange(desc(tokens_CHI)) %>% 
+  select(ID, tokens_CHI)
 
+# 2
+final_data %>%  
+  filter(VISIT == "1") %>% 
+  arrange(tokens_CHI)
 
 ```
 
@@ -308,7 +352,17 @@ USING SELECT
 2. What happens if you include the name of a variable multiple times in a select() call?
 
 ```{r}
+# 1
+final_data %>% 
+  filter(Diagnosis == "ASD") %>% 
+  select(ID, VISIT, CHI_MLU, tokens_CHI)
 
+# 2
+final_data %>% 
+  filter(Diagnosis == "ASD") %>% 
+  select(ID, VISIT, CHI_MLU, tokens_CHI, ID)
+
+# It changes the order a bit :) 
 ```
 
 
