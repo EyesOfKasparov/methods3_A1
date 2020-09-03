@@ -1,7 +1,7 @@
 ---
 title: "Assignment 1 - Data Cleaning - Instructions"
-author: "[FILL IN YOUR NAME]"
-date: "[FILL IN THE DATE]"
+author: "The Eyes of Kasparov"
+date: "2020-09-03"
 output: html_document
 ---
 
@@ -68,7 +68,9 @@ Load the three data sets, after downloading them from dropbox and saving them in
 * Word data: https://www.dropbox.com/s/8ng1civpl2aux58/token_train.csv?dl=0
 
 ```{r}
-
+demodata <- read_csv("https://www.dropbox.com/s/lol8f5m4pgrpmto/demo_train.csv?dl=1")
+loudata <- read_csv("https://www.dropbox.com/s/usyauqm37a76of6/LU_train.csv?dl=1")
+worddata <- read_csv("https://www.dropbox.com/s/8ng1civpl2aux58/token_train.csv?dl=1")
 ```
 
 Explore the 3 datasets (e.g. visualize them, summarize them, etc.). You will see that the data is messy, since the psychologist collected the demographic data, the linguist analyzed the length of utterance in May 2014 and the fumbling jack-of-all-trades analyzed the words several months later. 
@@ -76,6 +78,48 @@ In particular:
 - the same variables might have different names (e.g. participant and visit identifiers)
 - the same variables might report the values in different ways (e.g. participant and visit IDs)
 Welcome to real world of messy data :-)
+
+### EDA of demodata
+```{r}
+summary(demodata)
+
+# NaN values pct
+sapply(demodata, function(x) sum(is.na(x)) / length(x))
+
+# Num unique
+sapply(demodata, function(x) length(unique(x)))
+
+# plot some continuous scores 
+ggplot(demodata, aes(VinelandStandardScore)) + 
+  geom_histogram(fill="gray", color="black") + 
+  theme_minimal() 
+
+ggplot(demodata, aes(VinelandStandardScore)) + 
+  geom_histogram(fill="gray", color="black") + 
+  theme_minimal() 
+
+
+plot_score <- function(data, variable) {
+  ggplot(data, aes(eval(parse(text=variable)))) + 
+    geom_histogram(fill="gray", color="black") + 
+    theme_minimal() + 
+    xlab(variable)
+}
+
+plot_score(demodata, "VinelandStandardScore")
+
+
+score_names <- names(demodata)[str_detect(names(demodata), "Score")]
+for (name in score_names) {
+  ggsave(paste0(name, ".png"), plot_score(demodata, name))
+}
+
+
+
+
+```
+
+
 
 Before being able to combine the data sets we need to make sure the relevant variables have the same names and the same kind of values.
 
@@ -87,7 +131,22 @@ Pay particular attention to the variables indicating participant and visit.
 Tip: look through the chapter on data transformation in R for data science (http://r4ds.had.co.nz). Alternatively you can look into the package dplyr (part of tidyverse), or google "how to rename variables in R". Or check the janitor R package. There are always multiple ways of solving any problem and no absolute best method.
 
 
+### Fixing column names
 ```{r}
+## From visual inspection we see that SUBJ = Child.ID and VISIT is inconsistently capitalized ##
+
+# fixing demodata
+demodata <- demodata %>% 
+  rename(ID = Child.ID, 
+         VISIT = Visit)
+
+# fixing loudata
+loudata <- loudata %>% 
+  rename(ID = SUBJ)
+
+# fixing worddata
+worddata <- worddata %>% 
+  rename(ID = SUBJ)
 
 ```
 
@@ -97,8 +156,15 @@ Tip: The stringr package is what you need. str_extract () will allow you to extr
 
 
 ```{r}
+# We'll use parse_number for super simplicity
+demodata <- demodata %>% 
+  mutate(VISIT = as_factor(VISIT))
 
+loudata <- loudata %>% 
+  mutate(VISIT = as_factor(parse_number(VISIT)))
 
+worddata <- worddata %>% 
+  mutate(VISIT = as_factor(parse_number(VISIT)))
 ```
 
 2c. We also need to make a small adjustment to the content of the Child.ID coloumn in the demographic data. Within this column, names that are not abbreviations do not end with "." (i.e. Adam), which is the case in the other two data sets (i.e. Adam.). If The content of the two variables isn't identical the rows will not be merged.
@@ -109,6 +175,15 @@ Tip: You can either have one line of code for each child name that is to be chan
 
 
 ```{r}
+demodata <- demodata %>% 
+  mutate(ID = str_replace_all(ID, "\\.", ""))
+
+loudata <- loudata %>% 
+  mutate(ID = str_replace_all(ID, "\\.", ""))
+
+worddata <- loudata %>% 
+  mutate(ID = str_replace_all(ID, "\\.", ""))
+
 
 ```
 
@@ -145,6 +220,20 @@ Most variables should make sense, here the less intuitive ones.
 Feel free to rename the variables into something you can remember (i.e. nonVerbalIQ, verbalIQ)
 
 ```{r}
+# We are joining the tibbles on ID and VISIT
+all_data <- demodata %>% 
+  left_join(loudata, by = c("ID", "VISIT")) %>%  
+  left_join(worddata, by = c("ID", "VISIT"))
+
+
+# Selecting relevant columns 
+relevant_columns <- c()
+
+all_data <- all_data %>% select(ID, VISIT, Diagnosis, Ethnicity, Gender, Age, ADOS, 
+                    MullenRaw, ExpressiveLangRaw, Socialization, MOT_MLU.x, 
+                    CHI_MLU.x, types_MOT, types_CHI.x, tokens_MOT, tokens_CHI.x)
+
+all_data
 
 ```
 
@@ -155,7 +244,7 @@ Some things to pay attention to:
 * make sure to understand whether (and if so why) there are NAs in the dataset (e.g. some measures were not taken at all visits, some recordings were lost or permission to use was withdrawn)
 
 ```{r}
-
+?left_join
 
 ```
 
