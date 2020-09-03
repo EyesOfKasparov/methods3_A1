@@ -68,7 +68,6 @@ Load the three data sets, after downloading them from dropbox and saving them in
 * Word data: https://www.dropbox.com/s/8ng1civpl2aux58/token_train.csv?dl=0
 
 ```{r}
-
 ```
 
 Explore the 3 datasets (e.g. visualize them, summarize them, etc.). You will see that the data is messy, since the psychologist collected the demographic data, the linguist analyzed the length of utterance in May 2014 and the fumbling jack-of-all-trades analyzed the words several months later. 
@@ -88,6 +87,25 @@ Tip: look through the chapter on data transformation in R for data science (http
 
 
 ```{r}
+demo <-
+  read_csv("https://www.dropbox.com/s/lol8f5m4pgrpmto/demo_train.csv?dl=1") %>%
+  rename(VISIT = Visit) %>%
+  rename(ID = Child.ID) %>%                 
+  mutate(ID = str_remove_all(ID, "\\."))    # Remove .'s from ID
+
+utt <- 
+  read_csv("https://www.dropbox.com/s/usyauqm37a76of6/LU_train.csv?dl=1") %>%
+  rename(ID = SUBJ) %>%
+  mutate(VISIT = parse_number(VISIT)) %>%                 
+  mutate(ID = str_remove_all(ID, "\\."))
+
+words <- 
+  read_csv("https://www.dropbox.com/s/8ng1civpl2aux58/token_train.csv?dl=1") %>%
+  rename(ID = SUBJ) %>%
+  mutate(VISIT = parse_number(VISIT)) %>%                 
+  mutate(ID = str_remove_all(ID, "\\."))
+
+words$X <- NULL
 
 ```
 
@@ -109,7 +127,6 @@ Tip: You can either have one line of code for each child name that is to be chan
 
 
 ```{r}
-
 ```
 
 2d. Now that the nitty gritty details of the different data sets are fixed, we want to make a subset of each data set only containig the variables that we wish to use in the final data set.
@@ -145,7 +162,9 @@ Most variables should make sense, here the less intuitive ones.
 Feel free to rename the variables into something you can remember (i.e. nonVerbalIQ, verbalIQ)
 
 ```{r}
-
+df <- left_join(demo, words, by = c("ID", "VISIT")) %>%
+  left_join(utt, by = c("ID", "VISIT")) %>%
+  select(c(ID, VISIT, Diagnosis, Ethnicity, Gender, Age, ADOS, MullenRaw, ExpressiveLangRaw, Socialization, MOT_MLU, CHI_MLU,types_MOT,types_CHI,tokens_MOT,tokens_CHI))
 ```
 
 2e. Finally we are ready to merge all the data sets into just one. 
@@ -171,7 +190,13 @@ A possible way to do so:
 
 
 ```{r}
-
+df2 <- filter(df, VISIT == 1) %>%
+  select(c(ID, ADOS, MullenRaw, ExpressiveLangRaw, Socialization)) %>%
+  rename(ADOS1 = ADOS) %>%
+  rename(MullenRaw1 = MullenRaw) %>%
+  rename(ExpressiveLangRaw1 = ExpressiveLangRaw) %>%
+  rename(Socialization1 = Socialization) %>%
+  right_join(df, by = c("ID"))
 ```
 
 2g. Final touches
@@ -182,6 +207,17 @@ Now we want to
 * Save the data set using into a csv file. Hint: look into write.csv()
 
 ```{r}
+pacman::p_load(digest)
+anonymize <- function(x, algo="crc32"){
+  unq_hashes <- vapply(unique(x), function(object) digest(object, algo=algo), FUN.VALUE="", USE.NAMES=TRUE)
+  unname(unq_hashes[x])
+}
+
+dfa <- df2 %>%
+  mutate(ID = anonymize(ID)) %>%
+  mutate(Gender = ifelse(Gender == 1, "F", "M")) %>%
+  mutate(Diagnosis = ifelse(Diagnosis == "A", "ASD", "TD")) %>%
+  write_csv("anonymized_data.csv")
 
 ```
 
@@ -199,6 +235,24 @@ List all kids who:
 
 ```{r}
 
+dfa <- read_csv("anonymized_data.csv")
+
+# 1
+dfa %>%
+  filter(CHI_MLU > 2.7) %>%
+  select(c("ID", "CHI_MLU"))
+
+# 2
+dfa %>%
+  filter(VISIT == 1) %>%
+  filter(CHI_MLU < 1.5) %>%
+  select(c("ID","CHI_MLU"))
+
+# 3
+dfa %>%
+  group_by(ID) %>%
+  summarise(n = length(ID)) %>%
+  filter(n < 6)
 
 ```
 
@@ -209,7 +263,17 @@ USING ARRANGE
 2. Sort kids to find the kid who produced the least amount of words on the 1st visit.
 
 ```{r}
+# 1
+dfa %>%
+  filter(VISIT == 6) %>%
+  arrange(desc(CHI_MLU)) %>%
+  select(c("ID","CHI_MLU"))
 
+# 2
+dfa %>%
+  filter(VISIT == 1) %>%
+  arrange(CHI_MLU) %>%
+  select(c("ID","CHI_MLU"))
 
 ```
 
@@ -219,6 +283,16 @@ USING SELECT
 2. What happens if you include the name of a variable multiple times in a select() call?
 
 ```{r}
+# 1
+dfa %>%
+  filter(Diagnosis == "ASD") %>%
+  select(c(ID, CHI_MLU, MOT_MLU, Diagnosis))
+
+# 2
+dfa %>%
+  select(c(ID, ID, CHI_MLU, CHI_MLU, Diagnosis))
+
+# Then it is only represented once which is quite practical
 
 ```
 
@@ -229,6 +303,15 @@ USING MUTATE, SUMMARISE and PIPES
 3. The solution to task above enables us to assess the average amount of words produced by each child. Why don't we just use these average values to describe the language production of the children? What is the advantage of keeping all the data?
 
 ```{r}
+# 1, 2
+dfa %>%
+  group_by(ID) %>%
+  summarise(CHI_MLU_M = mean(CHI_MLU)) %>%
+  right_join(dfa, by = c("ID"))
 
+# 3
+# We can create a mixed effects linear model that has different intercepts and slopes based on the child - pretty cool if we want some nice models
+# The other would be a t-test which is pretty boring and normal
+lmerTest::lmer(CHI_MLU ~ Socialization * Gender + Age + (VISIT | ID), dfa)
 
 ```
