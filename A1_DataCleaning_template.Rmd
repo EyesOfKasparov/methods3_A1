@@ -372,6 +372,15 @@ USING MUTATE, SUMMARISE and PIPES
 3. The solution to task above enables us to assess the average amount of words produced by each child. Why don't we just use these average values to describe the language production of the children? What is the advantage of keeping all the data?
 
 ```{r}
+# 1 + 2 (don't see the difference?)
+final_data %>% 
+  group_by(ID) %>% 
+  summarise(mean_CHI_MLU = mean(CHI_MLU, na.rm = T)) %>% 
+  right_join(final_data) %>% 
+  select(ID, VISIT, CHI_MLU, mean_CHI_MLU) %>% 
+  arrange(ID, VISIT)
 
-
+# 3: An important part of the experiment is to look at the changes in language production 
+#    and how that rate is different from ASD and TD children - therefore we need the 
+#    complete data (also more data is often better)
 ```
